@@ -8,7 +8,11 @@ import sys
 
 # Diagnostic Boot Sequence: Intercept Authentication Drops
 try:
-    DEFAULT_SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
+    # CRITICAL FIX: Added Google Drive scope to allow searching by filename
+    DEFAULT_SCOPES = [
+        'https://www.googleapis.com/auth/spreadsheets',
+        'https://www.googleapis.com/auth/drive'
+    ]
     raw_creds = os.environ.get('GOOGLE_CREDENTIALS')
     
     if not raw_creds:
