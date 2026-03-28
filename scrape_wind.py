@@ -1,4 +1,4 @@
-import requests
+mport requests
 import gspread
 from google.oauth2.service_account import Credentials
 import os
@@ -8,7 +8,6 @@ import sys
 
 # Diagnostic Boot Sequence: Intercept Authentication Drops
 try:
-    # CRITICAL FIX: Added Google Drive scope to allow searching by filename
     DEFAULT_SCOPES = [
         'https://www.googleapis.com/auth/spreadsheets',
         'https://www.googleapis.com/auth/drive'
@@ -39,9 +38,9 @@ except Exception as boot_error:
     print(f"FATAL ERROR during server boot sequence: {boot_error}")
     sys.exit(1)
 
-# Localized Geographic Node Endpoints (BoM JSON) - South Channel Removed
+# Localized Geographic Node Endpoints (BoM JSON) - Corrected Fawkner URL
 STATIONS = {
-    "Fawkner Beacon": "http://www.bom.gov.au/fwo/IDV60901/IDV60901.086376.json",
+    "Fawkner Beacon": "http://www.bom.gov.au/fwo/IDV60901/IDV60901.95872.json",
     "Frankston Beach": "http://www.bom.gov.au/fwo/IDV60801/IDV60801.95872.json"
 }
 
