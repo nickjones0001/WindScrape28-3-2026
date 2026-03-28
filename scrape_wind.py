@@ -4,16 +4,36 @@ from google.oauth2.service_account import Credentials
 import os
 import json
 from datetime import datetime
+import sys
 
-# Setup Google Sheets Auth
-DEFAULT_SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
-creds_json = json.loads(os.environ['GOOGLE_CREDENTIALS'])
-creds = Credentials.from_service_account_info(creds_json, scopes=DEFAULT_SCOPES)
-gc = gspread.authorize(creds)
+# Diagnostic Boot Sequence: Intercept Authentication Drops
+try:
+    DEFAULT_SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
+    raw_creds = os.environ.get('GOOGLE_CREDENTIALS')
+    
+    if not raw_creds:
+        print("FATAL ERROR: The GOOGLE_CREDENTIALS secret is completely missing from your GitHub Actions settings.")
+        sys.exit(1)
+        
+    creds_json = json.loads(raw_creds)
+    creds = Credentials.from_service_account_info(creds_json, scopes=DEFAULT_SCOPES)
+    gc = gspread.authorize(creds)
 
-# Open Sheet and target specific tab
-sh = gc.open("Wind+WaveScrapeLLM 28-3-2026")
-worksheet = sh.worksheet("Wind")
+    # Diagnostic Database Linkage: Intercept Permission Drops
+    sheet_name = "Wind+WaveScrapeLLM 28-3-2026"
+    try:
+        sh = gc.open(sheet_name)
+        worksheet = sh.worksheet("Wind")
+    except gspread.exceptions.SpreadsheetNotFound:
+        print(f"FATAL ERROR: The server is blocked. You must open your Google Sheet and click 'Share' to give Editor access to this exact email: {creds_json.get('client_email')}")
+        sys.exit(1)
+    except gspread.exceptions.WorksheetNotFound:
+        print("FATAL ERROR: The database was found, but the tab at the bottom is not named exactly 'Wind'.")
+        sys.exit(1)
+
+except Exception as boot_error:
+    print(f"FATAL ERROR during server boot sequence: {boot_error}")
+    sys.exit(1)
 
 # Localized Geographic Node Endpoints (BoM JSON) - South Channel Removed
 STATIONS = {
