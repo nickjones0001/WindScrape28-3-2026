@@ -1,8 +1,8 @@
-name: Hourly Wind Scrape
+name: Continuous Wind Scrape
 on:
   schedule:
-    # Temporal Filter: Runs top of every hour during daylight (UTC)
-    - cron: '*/5 * * * *'
+    # Temporal Alignment: Synchronized to BoM's strict 10-minute update cycle (24 hours/day)
+    - cron: '*/10 * * * *'
   workflow_dispatch:
 
 jobs:
