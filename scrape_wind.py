@@ -22,7 +22,7 @@ try:
     creds = Credentials.from_service_account_info(creds_json, scopes=DEFAULT_SCOPES)
     gc = gspread.authorize(creds)
 
-    # Diagnostic Database Linkage: Intercept Permission Drops
+    # Diagnostic Database Linkage
     sheet_name = "Wind+WaveScrapeLLM 28-3-2026"
     try:
         sh = gc.open(sheet_name)
@@ -38,11 +38,11 @@ except Exception as boot_error:
     print(f"FATAL ERROR during server boot sequence: {boot_error}")
     sys.exit(1)
 
-# Localized Geographic Node Endpoints (BoM JSON) - Full 3-Node Array Restored
+# Verified Localized Geographic Node Endpoints (BoM JSON)
 STATIONS = {
     "Fawkner Beacon": "http://www.bom.gov.au/fwo/IDV60901/IDV60901.086376.json",
     "Frankston Beach": "http://www.bom.gov.au/fwo/IDV60801/IDV60801.95872.json",
-    "South Channel Island": "http://www.bom.gov.au/fwo/IDV60901/IDV60901.086344.json"
+    "South Channel Is.": "http://www.bom.gov.au/fwo/IDV60901/IDV60901.086344.json"
 }
 
 headers = {'User-Agent': 'Mozilla/5.0'}
