@@ -2,7 +2,7 @@ name: Hourly Wind Scrape
 on:
   schedule:
     # Temporal Filter: Runs top of every hour during daylight (UTC)
-    - cron: '5 * * * *'
+    - cron: '*/5 * * * *'
   workflow_dispatch:
 
 jobs:
