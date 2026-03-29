@@ -7,112 +7,105 @@ from datetime import datetime, timezone, timedelta
 import sys
 from bs4 import BeautifulSoup
 
-# --- 1. AUTHENTICATION & INITIALIZATION ---
+# --- 1. AUTHENTICATION ---
 try:
-    DEFAULT_SCOPES = [
-        'https://www.googleapis.com/auth/spreadsheets',
-        'https://www.googleapis.com/auth/drive'
-    ]
+    DEFAULT_SCOPES = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
     raw_creds = os.environ.get('GOOGLE_CREDENTIALS')
-    
     if not raw_creds:
-        print("FATAL ERROR: GOOGLE_CREDENTIALS secret is missing.")
+        print("ERROR: GOOGLE_CREDENTIALS secret missing.")
         sys.exit(1)
-        
     creds_json = json.loads(raw_creds)
     creds = Credentials.from_service_account_info(creds_json, scopes=DEFAULT_SCOPES)
     gc = gspread.authorize(creds)
-
-    sheet_name = "Wind+WaveScrapeLLM 28-3-2026"
-    sh = gc.open(sheet_name)
+    
+    sh = gc.open("Wind+WaveScrapeLLM 28-3-2026")
     worksheet = sh.worksheet("Wind")
-
-except Exception as boot_error:
-    print(f"FATAL ERROR during initialization: {boot_error}")
+except Exception as e:
+    print(f"Init Error: {e}")
     sys.exit(1)
 
 # --- 2. CONFIGURATION ---
-# JSON stations as per your registry 
+# Using specific Marine IDs from your verified registry
 JSON_STATIONS = {
     "Fawkner Beacon": "http://www.bom.gov.au/fwo/IDV60901/IDV60901.086376.json",
     "South Channel Island": "http://www.bom.gov.au/fwo/IDV60901/IDV60901.086344.json"
 }
 
-# HTML station for direct scraping 
-HTML_STATIONS = {
-    "Frankston Beach": "http://www.bom.gov.au/products/IDV60801/IDV60801.95872.shtml"
+# Frankston Beach HTML page
+FRANKSTON_URL = "http://www.bom.gov.au/products/IDV60801/IDV60801.95872.shtml"
+
+# Enhanced headers to bypass bot detection
+headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+    'Referer': 'http://www.bom.gov.au/vic/observations/melbourne.shtml'
 }
 
-headers = {'User-Agent': 'Mozilla/5.0'}
 melb_tz = timezone(timedelta(hours=11))
 
 def kmh_to_knots(kmh):
     try:
-        return round(float(kmh) * 0.539957, 1) if kmh is not None else "N/A"
-    except (ValueError, TypeError):
+        return round(float(kmh) * 0.539957, 1) if kmh else "N/A"
+    except:
         return "N/A"
 
-# --- 3. EXECUTION LOOP ---
+# --- 3. EXECUTION ---
 rows_added = 0
-ext_dt = datetime.now(melb_tz)
-ext_date = ext_dt.strftime('%d/%m/%Y')
-ext_time = ext_dt.strftime('%H:%M')
+now = datetime.now(melb_tz)
+ext_date, ext_time = now.strftime('%d/%m/%Y'), now.strftime('%H:%M')
 
-# PART A: Process JSON Stations (Fawkner & South Channel)
+# PART A: JSON STATIONS
 for name, url in JSON_STATIONS.items():
     try:
-        response = requests.get(url, headers=headers, timeout=10)
-        data = response.json()['observations']['data'][0]
+        resp = requests.get(url, headers=headers, timeout=15)
+        resp.raise_for_status()
+        data = resp.json()['observations']['data'][0]
         
-        raw_time = str(data['local_date_time_full'])
-        obs_date = f"{raw_time[6:8]}/{raw_time[4:6]}/{raw_time[0:4]}"
-        obs_time = f"{raw_time[8:10]}:{raw_time[10:12]}"
-
-        row = [
-            obs_date, obs_time, name, "N/A", "N/A", "N/A", 
-            kmh_to_knots(data.get('wind_spd_kmh')), 
-            kmh_to_knots(data.get('gust_kmh')), 
-            data.get('wind_dir'), ext_date, ext_time
-        ]
+        raw_t = str(data['local_date_time_full'])
+        row = [f"{raw_t[6:8]}/{raw_t[4:6]}/{raw_t[0:4]}", f"{raw_t[8:10]}:{raw_t[10:12]}", 
+               name, "N/A", "N/A", "N/A", kmh_to_knots(data.get('wind_spd_kmh')), 
+               kmh_to_knots(data.get('gust_kmh')), data.get('wind_dir'), ext_date, ext_time]
+        
         worksheet.append_row(row)
         rows_added += 1
-        print(f"Logged JSON station: {name}")
+        print(f"Logged {name}")
     except Exception as e:
-        print(f"Failure for JSON station {name}: {e}")
+        print(f"JSON Error for {name}: {e}")
 
-# PART B: Process HTML Station (Frankston Beach Scrape)
-for name, url in HTML_STATIONS.items():
-    try:
-        response = requests.get(url, headers=headers, timeout=10)
-        soup = BeautifulSoup(response.text, 'html.parser')
+# PART B: FRANKSTON BEACH (BeautifulSoup)
+try:
+    resp = requests.get(FRANKSTON_URL, headers=headers, timeout=15)
+    resp.raise_for_status()
+    soup = BeautifulSoup(resp.text, 'html.parser')
+    
+    # Find the observations table
+    table = soup.find('table', {'class': 'stats'})
+    if not table:
+        table = soup.find('table') # Fallback to any table if class 'stats' is missing
         
-        # BOM observation tables usually have the latest data in the first body row
-        table = soup.find('table')
-        rows = table.find_all('tr')
-        # Row 0 is header, Row 1 is sub-header, Row 2 is latest data
-        latest_row = rows[2]
-        cols = latest_row.find_all('td')
+    rows = table.find_all('tr')
+    # Finding the first row with numerical data (usually index 2 or 3)
+    data_row = None
+    for r in rows:
+        tds = r.find_all('td')
+        if len(tds) > 5 and tds[4].text.strip().replace('.','').isdigit():
+            data_row = tds
+            break
 
-        # Mapping for IDV60801 table structure:
-        # Col 1: Day/Time, Col 3: Wind Dir, Col 4: Wind Speed, Col 5: Wind Gust
-        obs_time_raw = cols[1].text.strip() # e.g., "29/10:30am"
-        wind_dir = cols[3].text.strip()
-        wind_spd_kmh = cols[4].text.strip()
-        wind_gust_kmh = cols[5].text.strip()
+    if data_row:
+        obs_time = data_row[1].text.strip().split('/')[-1] # Grabs "10:30am" from "29/10:30am"
+        wind_dir = data_row[3].text.strip()
+        wind_spd = data_row[4].text.strip()
+        wind_gst = data_row[5].text.strip()
 
-        # Clean 'obs_time' to match your format
-        obs_time = obs_time_raw.split('/')[1] if '/' in obs_time_raw else obs_time_raw
-
-        row = [
-            ext_date, obs_time, name, "N/A", "N/A", "N/A", 
-            kmh_to_knots(wind_spd_kmh), 
-            kmh_to_knots(wind_gust_kmh), 
-            wind_dir, ext_date, ext_time
-        ]
+        row = [ext_date, obs_time, "Frankston Beach", "N/A", "N/A", "N/A", 
+               kmh_to_knots(wind_spd), kmh_to_knots(wind_gst), wind_dir, ext_date, ext_time]
         worksheet.append_row(row)
         rows_added += 1
-        print(f"Logged Scraped station: {name}")
-    except Exception as e:
-        print(f"Failure for Scraped station {name}: {e}")
+        print("Logged Frankston Beach (Scraped)")
+    else:
+        print("Error: Could not find data row in Frankston HTML.")
+except Exception as e:
+    print(f"Scrape Error for Frankston: {e}")
 
-print(f"Process Complete: {rows_added} rows added.")
+print(f"Process Complete. {rows_added} rows added.")
