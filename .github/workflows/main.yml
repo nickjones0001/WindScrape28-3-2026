@@ -1,7 +1,7 @@
 name: Continuous Wind Scrape
 on:
   schedule:
-    # Temporal Alignment: Synchronized to BoM's strict 10-minute update cycle (24 hours/day)
+    # Temporal Alignment: Synchronized to BoM's strict 10-minute update cycle
     - cron: '*/10 * * * *'
   workflow_dispatch:
 
@@ -16,7 +16,8 @@ jobs:
         with:
           python-version: '3.10'
       - name: Install dependencies
-        run: pip install requests gspread google-auth
+        # CRITICAL FIX: beautifulsoup4 library added to the server environment
+        run: pip install requests gspread google-auth beautifulsoup4
       - name: Run scraper
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
