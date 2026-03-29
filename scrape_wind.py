@@ -5,7 +5,6 @@ import os
 import json
 from datetime import datetime, timezone, timedelta
 import sys
-from bs4 import BeautifulSoup
 
 # --- 1. AUTHENTICATION ---
 try:
@@ -20,19 +19,14 @@ except Exception as e:
     sys.exit(1)
 
 # --- 2. CONFIGURATION ---
-# Fawkner and South Channel work perfectly with JSON
-JSON_STATIONS = {
+# NOTE: Fawkner/South use IDV60901, while Frankston Beach uses IDV60801
+STATIONS = {
     "Fawkner Beacon": "http://www.bom.gov.au/fwo/IDV60901/IDV60901.95872.json",
-    "South Channel Island": "http://www.bom.gov.au/fwo/IDV60901/IDV60901.94853.json"
-}
-# This URL is the specific 'Coastal' view for Frankston Beach
-FRANKSTON_URL = "https://www.bom.gov.au/places/vic/st-andrews-beach/observations/frankston-beach/"
-
-headers = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Referer': 'https://www.bom.gov.au/vic/observations/melbourne.shtml'
+    "South Channel Island": "http://www.bom.gov.au/fwo/IDV60901/IDV60901.94853.json",
+    "Frankston Beach": "http://www.bom.gov.au/fwo/IDV60801/IDV60801.94871.json"
 }
 
+headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
 melb_tz = timezone(timedelta(hours=11))
 
 def kmh_to_knots(kmh):
@@ -46,48 +40,30 @@ rows_added = 0
 now = datetime.now(melb_tz)
 ext_date, ext_time = now.strftime('%d/%m/%Y'), now.strftime('%H:%M')
 
-# PART A: JSON STATIONS
-for name, url in JSON_STATIONS.items():
+for name, url in STATIONS.items():
     try:
-        data = requests.get(url, headers=headers, timeout=15).json()['observations']['data'][0]
+        resp = requests.get(url, headers=headers, timeout=15)
+        resp.raise_for_status()
+        data = resp.json()['observations']['data'][0]
+        
+        # Parse Observation Time
         raw_t = str(data['local_date_time_full'])
-        row = [f"{raw_t[6:8]}/{raw_t[4:6]}/{raw_t[0:4]}", f"{raw_t[8:10]}:{raw_t[10:12]}", name, 
-               "N/A", "N/A", "N/A", kmh_to_knots(data.get('wind_spd_kmh')), 
-               kmh_to_knots(data.get('gust_kmh')), data.get('wind_dir'), ext_date, ext_time]
+        obs_date = f"{raw_t[6:8]}/{raw_t[4:6]}/{raw_t[0:4]}"
+        obs_time = f"{raw_t[8:10]}:{raw_t[10:12]}"
+
+        # Standardized Row Format for your "Wind" tab
+        row = [
+            obs_date, obs_time, name, 
+            "N/A", "N/A", "N/A", 
+            kmh_to_knots(data.get('wind_spd_kmh')), 
+            kmh_to_knots(data.get('gust_kmh')), 
+            data.get('wind_dir', 'N/A'), 
+            ext_date, ext_time
+        ]
         worksheet.append_row(row)
         rows_added += 1
         print(f"Logged {name}")
     except Exception as e:
-        print(f"JSON Error for {name}: {e}")
+        print(f"Error for {name}: {e}")
 
-# PART B: FRANKSTON BEACH HTML SCRAPE
-try:
-    resp = requests.get(FRANKSTON_URL, headers=headers, timeout=15)
-    soup = BeautifulSoup(resp.text, 'html.parser')
-    
-    # In the 'Places' observation table:
-    # Row 0: Header, Row 1: Subheader, Row 2: Latest Observation
-    table = soup.find('table')
-    rows = table.find_all('tr')
-    
-    for r in rows:
-        tds = r.find_all('td')
-        # We need a row with at least 8 columns (Time, Temp, Feels, Hum, Dir, Spd, Gust, Press)
-        if len(tds) >= 7:
-            time_str = tds[0].text.strip()
-            # If the first column looks like a time (e.g., '4:30 pm'), this is our row
-            if "pm" in time_str.lower() or "am" in time_str.lower():
-                w_dir = tds[4].text.strip()
-                w_spd_kmh = tds[5].text.strip()
-                w_gst_kmh = tds[6].text.strip()
-                
-                row = [ext_date, time_str, "Frankston Beach", "N/A", "N/A", "N/A", 
-                       kmh_to_knots(w_spd_kmh), kmh_to_knots(w_gst_kmh), w_dir, ext_date, ext_time]
-                worksheet.append_row(row)
-                rows_added += 1
-                print("Logged Frankston Beach via HTML Scrape")
-                break
-except Exception as e:
-    print(f"Scrape Error for Frankston: {e}")
-
-print(f"Done. {rows_added}/3 rows added.")
+print(f"Process Complete: {rows_added}/3 rows added.")
