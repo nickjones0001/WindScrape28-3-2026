@@ -44,7 +44,6 @@ def kmh_to_knots(kmh):
         return 0.0
 
 def get_wind_arrow(text_dir):
-    """Maps BOM text direction to visual arrows."""
     clean_dir = str(text_dir).strip().upper()
     mapping = {
         "N": "↓ N", "NNE": "↙ NNE", "NE": "↙ NE", "ENE": "← ENE",
@@ -53,8 +52,8 @@ def get_wind_arrow(text_dir):
         "W": "→ W", "WNW": "↘ WNW", "NW": "↘ NW", "NNW": "↓ NNW",
         "CALM": "○ Calm"
     }
-    # Adding a single quote prefix forces Google Sheets to treat this as text
     arrow = mapping.get(clean_dir, f"{clean_dir}")
+    # Force text format with ' to ensure Pivot Tables treat it as a label, not a number
     return f"'{arrow}"
 
 # --- 3. EXECUTION ---
@@ -76,21 +75,20 @@ for name, url in STATIONS.items():
         visual_arrow = get_wind_arrow(bom_direction)
 
         row = [
-            obs_date,
-            obs_time,
-            name,
-            "N/A",
-            "N/A",
-            "N/A",
-            kmh_to_knots(data_packet.get('wind_spd_kmh')),
-            kmh_to_knots(data_packet.get('gust_kmh')),
-            bom_direction,
-            ext_date,
-            ext_time,
-            visual_arrow  # Now prefixed with ' to stop date conversion
+            obs_date,             # A
+            obs_time,             # B
+            name,                 # C
+            "N/A",                # D
+            "N/A",                # E
+            "N/A",                # F
+            kmh_to_knots(data_packet.get('wind_spd_kmh')), # G
+            kmh_to_knots(data_packet.get('gust_kmh')),     # H
+            bom_direction,        # I
+            ext_date,             # J
+            ext_time,             # K
+            visual_arrow          # L
         ]
         
-        # Using RAW to ensure our ' prefix is respected
         worksheet.append_row(row, value_input_option='RAW')
         rows_added += 1
         print(f"Logged {name} successfully.")
